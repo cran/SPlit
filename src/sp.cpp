@@ -13,9 +13,8 @@ int parallel_threads = 1;
 #endif
 
 
-void printProgress(int& it_num, int& it_max)
+void printProgress(int percent)
 {
-	int percent = (100 * (it_num + 1)) / it_max;
 	if(parallel_threads == 1)
 		Rcpp::Rcout << "\rOptimizing <1 thread> [" << std::string(percent / 5, '+') << std::string(100 / 5 - percent / 5, ' ') << "] " << percent << "%";
 	else
@@ -50,16 +49,23 @@ Rcpp::NumericMatrix sp_cpp(std::size_t& des_num, int dim_num, Rcpp::NumericMatri
 			des[j + i * dim_num] = ini(i, j);
   
 	double nug = 0.0;
+	int percent_complete = 0;
 	while(cont)
 	{
-		printProgress(it_num, it_max);
+		int percent = (100 * (it_num + 1)) / it_max;
+		if(percent > percent_complete)
+		{
+			printProgress(percent);
+			percent_complete = percent;
+		}
+		
     	curconst.fill(0.0);
     	bool nanflg = false;
 	    for(std::size_t i = 0; i < des_num; i++)
 			for(int j = 0; j < dim_num; j++)
 				prevdes[j + i * dim_num] = des[j + i * dim_num];
     
-	    arma::mat rnd(point_num,dim_num); 
+	    arma::mat rnd(point_num, dim_num); 
 	    arma::vec rnd_wts(point_num); 
 	    std::uniform_int_distribution<int> uddist(0, distsamp.nrow() - 1);
 	    for(std::size_t i = 0; i < point_num; i++)

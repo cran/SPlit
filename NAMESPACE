@@ -1,4 +1,4 @@
 useDynLib(SPlit, .registration=TRUE)
-importFrom(Rcpp, evalCpp)
+import(Rcpp)
 importFrom(stats, contr.helmert)
 export(SPlit, subsample)

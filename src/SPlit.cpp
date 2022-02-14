@@ -1,29 +1,36 @@
 // [[Rcpp::plugins("cpp11")]]
+#include <memory>
 #include <vector>
 #include <Rcpp.h>
-#include <algorithm>
+#include <cmath>
+#include <iomanip>
+#include <iostream>
 #include "nanoflann.hpp"
-
 
 class DF
 {
 private:
-	Rcpp::NumericMatrix df_;
+	std::shared_ptr<Rcpp::NumericMatrix> df_;
 
 public:
-	void importData(Rcpp::NumericMatrix& df)
+	void import_data(Rcpp::NumericMatrix& df)
 	{
-		df_ = df;
+		df_ = std::make_shared<Rcpp::NumericMatrix>(Rcpp::transpose(df));
 	}
 
-	inline std::size_t kdtree_get_point_count() const
+	std::size_t kdtree_get_point_count() const
 	{
-		return df_.rows();
+		return df_->cols();
 	}
 
-	inline double kdtree_get_pt(const std::size_t idx, const std::size_t dim) const 
+	double kdtree_get_pt(const std::size_t idx, const std::size_t dim) const 
 	{
-		return df_(idx, dim);
+		return (*df_)(dim, idx);
+	}
+
+	const double* get_row(const std::size_t idx) const
+	{
+		return &(*df_)(0, idx);
 	}
 
 	template <class BBOX>
@@ -41,36 +48,39 @@ class KDTree
 {
 private:
 	const std::size_t dim_;
+	const std::size_t N_;
+	const std::size_t n_;
 	DF data_;
-	Rcpp::NumericMatrix sp_;
+	DF sp_;
 
 public:
-	KDTree(Rcpp::NumericMatrix& data, Rcpp::NumericMatrix& sp) : dim_(data.cols())
+	KDTree(Rcpp::NumericMatrix& data, Rcpp::NumericMatrix& sp) : 
+	dim_(data.cols()), N_(data.rows()), n_(sp.rows())
 	{
 		if(static_cast<unsigned int>(sp.cols()) != dim_)
 			Rcpp::Rcerr << "\nDimensions do not match.\n";
 		else
 		{
-			data_.importData(data);
-			sp_ = sp;
+			data_.import_data(data);
+			sp_.import_data(sp);
 		}
 	}
 
 	std::vector<std::size_t> subsample_indices_sequential()
 	{
-		kdTree tree(dim_, data_, nanoflann::KDTreeSingleIndexAdaptorParams(32));
+		kdTree tree(dim_, data_, nanoflann::KDTreeSingleIndexAdaptorParams(8));
+		
 		nanoflann::KNNResultSet<double> resultSet(1);
 		std::size_t index;
 		double distance;
+		
 		std::vector<std::size_t> indices;
-		std::size_t n = sp_.rows();
-		indices.reserve(n);
-		for(std::size_t i = 0; i < n; i++)
+		indices.reserve(n_);
+
+		for(std::size_t i = 0; i < n_; i++)
 		{
 			resultSet.init(&index, &distance);
-			Rcpp::NumericVector row = sp_.row(i);
-			std::vector<double> query_point(row.begin(), row.end());
-			tree.findNeighbors(resultSet, &query_point[0], nanoflann::SearchParams());
+			tree.findNeighbors(resultSet, sp_.get_row(i), nanoflann::SearchParams());
 			indices.push_back(index + 1);
 			tree.removePoint(index);
 		}
@@ -86,46 +96,4 @@ std::vector<std::size_t> subsample(Rcpp::NumericMatrix& data, Rcpp::NumericMatri
 	KDTree kdt(data, points);
 	return kdt.subsample_indices_sequential();
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

@@ -1,19 +1,13 @@
-sp = function(n, p, dist.samp, num.subsamp=min(10000, nrow(dist.samp)), rnd.flg=ifelse(num.subsamp <= 10000, FALSE, TRUE), 
-	iter.max=500, wts=NA, tol=1e-10, n0=n*p, nThreads)
+compute_sp = function(n, p, dist.samp, num.subsamp, iter.max=500, tol=1e-10, nThreads)
 {
-	if(!rnd.flg)
+	rnd.flg = FALSE
+	if(num.subsamp < nrow(dist.samp))
 	{
-		num.subsamp = nrow(dist.samp)
+		rnd.flg = TRUE
 	}
 
-	if(anyNA(wts))
-	{
-		wts = rep(1.0, nrow(dist.samp))
-    }
-    else
-    {
-    	wts = nrow(dist.samp) * wts;
-    }
+	wts = rep(1.0, nrow(dist.samp))
+	n0 = n * p
 
 	if(missing(nThreads))
 	{
@@ -68,12 +62,59 @@ sp = function(n, p, dist.samp, num.subsamp=min(10000, nrow(dist.samp)), rnd.flg=
 }
 
 
+data_format = function(data)
+{
+	if(anyNA(data))
+	{
+		stop("Dataset contains missing value(s).")
+	}
+
+	D = matrix(, nrow=nrow(data))
+	for(j in 1:ncol(data))
+	{
+		if(is.factor(data[, j]))
+		{
+			factor = unique(data[, j])
+			if(length(factor) == 1)
+			{
+				next
+			}
+
+			factor_helm = contr.helmert(length(factor))
+			helm = factor_helm[match(data[, j], factor), ]
+			D = cbind(D, helm)
+		}
+		else
+		{
+			if(is.numeric(data[, j]))
+			{
+				if(sum(data[1, j] == data[, j]) == nrow(data))
+				{
+					next
+				}
+
+				D = cbind(D, data[, j])
+			}
+			else
+			{
+				stop("Dataset constains non-numeric non-factor column(s).")
+			}
+		}
+	}
+
+	D = D[, -1]
+	D = scale(D)
+	return(D)
+}
+
+
 #' Split a dataset for training and testing
 #' 
-#' \code{SPlit()} implements the optimal data splitting procedure described in Joseph and Vakayil (2020). 'SPlit' can be applied to both regression and classification problems, and is model-independent. As a preprocessing step, the nominal categorical columns in the dataset must be declared as factors, and the ordinal categorical columns must be converted to numeric using scoring.
-#'
+#' \code{SPlit()} implements the optimal data splitting procedure described in Joseph and Vakayil (2021). \code{SPlit} can be applied to both regression and classification problems, and is model-independent. As a preprocessing step, the nominal categorical columns in the dataset must be declared as factors, and the ordinal categorical columns must be converted to numeric using scoring.
+#' 
 #' @param data The dataset including both the predictors and response(s); should not contain missing values, and only numeric and/or factor column(s) are allowed.  
 #' @param splitRatio The ratio in which the dataset is to be split; should be in (0, 1) e.g. for an 80-20 split, the \code{splitRatio} is either 0.8 or 0.2.
+#' @param kappa If provided, stochastic majorization-minimization is used for computing support points using a random sample from the dataset of size = \code{ceiling(kappa * splitRatio * nrow(data))}, in every iteration.
 #' @param maxIterations The maximum number of iterations before the tolerance level is reached during support points optimization.
 #' @param tolerance The tolerance level for support points optimization; measured in terms of the maximum point-wise difference in distance between successive solutions.
 #' @param nThreads Number of threads to be used for parallel computation; if not supplied, \code{nThreads} defaults to maximum available threads.
@@ -83,6 +124,8 @@ sp = function(n, p, dist.samp, num.subsamp=min(10000, nrow(dist.samp)), rnd.flg=
 #' @details Support points are defined only for continuous variables. The categorical variables are handled as follows. \code{SPlit()} will automatically convert a nominal categorical variable with \eqn{m} levels to \eqn{m-1} continuous variables using Helmert coding. Ordinal categorical variables should be converted to numerical columns using a scoring method before using \code{SPlit()}. 
 #' For example, if the three levels of an ordinal variable are poor, good, and excellent, then the user may choose 1, 2, and 5 to represent the three levels. These values depend on the problem and data collection method, and therefore, \code{SPlit()} will not do it automatically. The columns of the resulting numeric dataset are then standardized to have mean zero and variance one. 
 #' \code{SPlit()} then computes the support points and calls the provided \code{subsample()} function to perform a nearest neighbor subsampling. The indices of this subsample are returned.
+#'
+#' \code{SPlit} can be time consuming for large datasets. The computational time can be reduced by using the stochastic majorization-minimization technique with a trade-off in the quality of the split. For example, setting \code{kappa = 2} will use a random sample, twice the size of the smaller subset in the split, instead of using the whole dataset in every iteration of the support points optimization. Another option for large datasets is to use data twinning (Vakayil and Joseph, 2022) implemented in the \code{R} package \href{https://CRAN.R-project.org/package=twinning}{\code{twinning}}. \code{Twinning} is extremely fast, but for small datasets, the results may not be as good as \code{SPlit}.
 #'
 #' @export
 #' @examples
@@ -102,50 +145,39 @@ sp = function(n, p, dist.samp, num.subsamp=min(10000, nrow(dist.samp)), rnd.flg=
 #' irisTrain = iris[-SPlitIndices, ]
 #'
 #' @references
-#' Joseph, V. R., & Vakayil, A. (2020). SPlit: An Optimal Method for Data Splitting. arXiv preprint arXiv:2012.10945.
+#' Joseph, V. R., & Vakayil, A. (2021). SPlit: An Optimal Method for Data Splitting. Technometrics, 1-11. doi:10.1080/00401706.2021.1921037.
 #'
+#' Vakayil, A., & Joseph, V. R. (2022). Data Twinning. Statistical Analysis and Data Mining: The ASA Data Science Journal. https://doi.org/10.1002/sam.11574.
+#' 
 #' Mak, S., & Joseph, V. R. (2018). Support points. The Annals of Statistics, 46(6A), 2562-2592.
 
 
-SPlit = function(data, splitRatio=0.2, maxIterations=500, tolerance=1e-10, nThreads)
+SPlit = function(data, splitRatio=0.2, kappa=NULL, maxIterations=500, tolerance=1e-10, nThreads)
 {
-	if(anyNA(data))
-	{
-		stop("Dataset contains missing value(s).")
-	}
 
 	if(splitRatio <= 0 | splitRatio >= 1)
 	{
 		stop("splitRatio should be in (0, 1).")
 	}
 
-	data_ = matrix(, nrow=nrow(data))
-	for(j in 1:ncol(data))
+	data_ = data_format(data)
+	n = round(min(splitRatio, 1 - splitRatio) * nrow(data_))
+
+	if(is.null(kappa))
 	{
-		if(is.factor(data[, j]))
+		kappa = nrow(data_)
+	}
+	else
+	{
+		if(kappa <= 0)
 		{
-			factor = unique(data[, j])
-			factor_helm = contr.helmert(length(factor))
-			data_helm = factor_helm[match(data[, j], factor), ]
-			data_ = cbind(data_, data_helm)
+			stop("kappa should be positive.")
 		}
-		else
-		{
-			if(is.numeric(data[, j]))
-			{
-				data_ = cbind(data_, data[, j])
-			}
-			else
-			{
-				stop("Dataset constains non-numeric non-factor column(s).")
-			}
-		}
+
+		kappa = min(nrow(data_), ceiling(kappa * n))
 	}
 
-	data_ = data_[, -1]
-	data_ = scale(data_)
-	n = round(min(splitRatio, 1 - splitRatio) * nrow(data_))
-	sp_ = sp(n, ncol(data_), dist.samp=data_, iter.max=maxIterations, tol=tolerance, nThreads=nThreads)
+	sp_ = compute_sp(n, ncol(data_), dist.samp=data_, num.subsamp=kappa, iter.max=maxIterations, tol=tolerance, nThreads=nThreads)
 	return(subsample(data_, sp_))
 }
 
