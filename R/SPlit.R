@@ -182,6 +182,53 @@ SPlit = function(data, splitRatio=0.2, kappa=NULL, maxIterations=500, tolerance=
 }
 
 
+#' Optimal splitting ratio
+#' 
+#' \code{splitratio()} finds the optimal splitting ratio by assuming a polynomial regression model with interactions can approximate the true model. The number of parameters in the model is estimated from the full data using stepwise regression. A simpler solution is to choose the number of parameters to be square root of the number of unique rows in the input matrix of the dataset. Please see Joseph (2022) for details.
+#' 
+#' @param x Input matrix
+#' @param y Response (output variable)
+#' @param method This could be “simple” or “regression”. The default method “simple” uses the square root of the number of unique rows in \code{x} as the number of parameters, whereas “regression” estimates the number of parameters using stepwise regression. The “regression” method works only with continuous output variable.
+#' @param degree This specifies the degree of the polynomial to be fitted, which is needed only if \code{method}=“regression” is used. Default is 2.
+#' 
+#' @return Splitting ratio, which is the fraction of the dataset to be used for testing.
+#'
+#' @export
+#' @examples
+#' X = rnorm(n=100, mean=0, sd=1) 
+#' Y = rnorm(n=100, mean=X^2, sd=1)
+#' splitratio(x=X, y=Y)
+#' splitratio(x=X, y=Y, method="regression")
+#'
+#' @references
+#' Joseph, V. R. (2022). Optimal Ratio for Data Splitting. Statistical Analysis & Data Mining: The ASA Data Science Journal, to appear.
+
+
+splitratio = function(x, y, method="simple", degree=2)
+{
+	if(method == "regression")
+	{
+	    x = as.data.frame(polym(as.matrix(x), degree=degree))
+	    names(x) = paste("x", 1:dim(x)[2], sep="")
+	    if(is.numeric(y))
+	    {
+	      a = lm(y~., data=data.frame(x, y))
+	      a.step = step(a, trace=0)
+	      p = length(a.step$coefficients)
+	    } else 
+	    {
+	      print("using method=simple for nonnumeric response")
+	      p = sqrt(dim(unique(as.matrix(x)))[1])
+	    }
+	} else 
+  	{
+    	p = sqrt(dim(unique(as.matrix(x)))[1])
+  	}
+
+  gamma = 1 / (sqrt(p) + 1)
+  return(gamma)
+}
+
 
 
 
