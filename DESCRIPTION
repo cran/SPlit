@@ -1,8 +1,8 @@
 Package: SPlit
 Type: Package
 Title: Split a Dataset for Training and Testing
-Version: 1.2
-Date: 2022-03-22
+Version: 1.3
+Date: 2026-01-12
 Authors@R: 
 	c(person("Akhil", "Vakayil", role = c("aut", "cre"), email = "akhilv@gatech.edu"),
 	person("Roshan", "Joseph", role = c("aut", "ths")),
@@ -14,13 +14,13 @@ Description: Procedure to optimally split a dataset for training and testing.
 License: GPL (>= 2)
 Imports: Rcpp (>= 1.0.4)
 LinkingTo: Rcpp, RcppArmadillo
-RoxygenNote: 7.1.2
+RoxygenNote: 7.3.3
 Encoding: UTF-8
 NeedsCompilation: yes
-Packaged: 2022-03-22 05:20:04 UTC; akhil
+Packaged: 2026-01-12 19:08:38 UTC; akhil
 Author: Akhil Vakayil [aut, cre],
   Roshan Joseph [aut, ths],
   Simon Mak [aut]
 Maintainer: Akhil Vakayil <akhilv@gatech.edu>
 Repository: CRAN
-Date/Publication: 2022-03-22 08:00:08 UTC
+Date/Publication: 2026-01-17 19:50:08 UTC
